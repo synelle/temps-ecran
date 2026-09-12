@@ -178,12 +178,15 @@ function todayIsoDate() {
 }
 
 function fmt(seconds) {
-  const s = Math.max(0, Math.round(seconds));
+  const neg = seconds < 0;
+  const s = Math.round(Math.abs(seconds));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-  return `${m}:${String(sec).padStart(2, "0")}`;
+  const body = h > 0
+    ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
+    : `${m}:${String(sec).padStart(2, "0")}`;
+  return (neg ? "-" : "") + body;
 }
 
 function todayBudgetSeconds(child) {
@@ -337,7 +340,8 @@ setInterval(() => {
       if (child.is_running && !alarmedIds.has(child.id)) {
         alarmedIds.add(child.id);
         playAlarm();
-        autoStop(child);
+        // le temps est écoulé, mais le chrono continue de tourner en négatif
+        // (pas d'arrêt automatique) pour que le parent voie le dépassement
       }
     } else {
       display.classList.remove("time-up");
@@ -361,7 +365,6 @@ async function toggleTimer(child) {
       .update({ is_running: false, started_at: null, consumed_seconds: Math.round(newConsumed) })
       .eq("id", child.id);
   } else {
-    if (remainingSeconds(child) <= 0) return; // plus de temps, on ne démarre pas
     const nowIso = new Date().toISOString();
     child.is_running = true;
     child.started_at = nowIso;
@@ -371,18 +374,6 @@ async function toggleTimer(child) {
       .update({ is_running: true, started_at: nowIso })
       .eq("id", child.id);
   }
-  render();
-}
-
-async function autoStop(child) {
-  const budget = todayBudgetSeconds(child);
-  child.is_running = false;
-  child.started_at = null;
-  child.consumed_seconds = budget;
-  await supabaseClient
-    .from("children")
-    .update({ is_running: false, started_at: null, consumed_seconds: budget })
-    .eq("id", child.id);
   render();
 }
 

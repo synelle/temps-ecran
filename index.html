@@ -17,6 +17,7 @@
 <body>
 
 <div class="topbar-actions">
+  <button id="statsBtn" class="btn btn-icon btn-float" title="Statistiques">📅</button>
   <button id="pinManageBtn" class="btn btn-icon btn-float" title="Code PIN">🔒</button>
   <button id="addChildBtn" class="btn btn-add btn-float" title="Ajouter un enfant">➕ Enfant</button>
 </div>
@@ -135,6 +136,34 @@
       <div class="modal-actions-right">
         <button type="button" id="pinManageCloseBtn" class="btn">Fermer</button>
         <button type="button" id="pinChangeBtn" class="btn btn-primary">Changer le code</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<!-- Modale statistiques (calendrier mensuel par enfant) -->
+<dialog id="statsModal" class="modal modal-wide">
+  <div class="modal-card">
+    <div class="stats-header">
+      <select id="statsChildSelect"></select>
+      <div class="stats-month-nav">
+        <button type="button" id="statsPrevBtn" class="btn btn-icon" title="Mois précédent">‹</button>
+        <span id="statsMonthLabel" class="stats-month-label"></span>
+        <button type="button" id="statsNextBtn" class="btn btn-icon" title="Mois suivant">›</button>
+      </div>
+    </div>
+    <div class="stats-weekdays">
+      <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
+    </div>
+    <div id="statsGrid" class="stats-grid"></div>
+    <div class="stats-legend">
+      <span><i class="stats-dot stats-dot-ok"></i> Dans le budget</span>
+      <span><i class="stats-dot stats-dot-over"></i> Dépassé</span>
+      <span><i class="stats-dot stats-dot-none"></i> Pas utilisé / pas de donnée</span>
+    </div>
+    <div class="modal-actions">
+      <div class="modal-actions-right">
+        <button type="button" id="statsCloseBtn" class="btn btn-primary">Fermer</button>
       </div>
     </div>
   </div>

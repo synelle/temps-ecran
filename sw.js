@@ -3,7 +3,7 @@
 // Les appels Supabase (autre origine) ne sont jamais interceptés : les données
 // restent toujours en direct.
 
-const CACHE_NAME = "temps-ecran-v3";
+const CACHE_NAME = "temps-ecran-v4";
 const APP_SHELL = [
   "./",
   "./index.html",

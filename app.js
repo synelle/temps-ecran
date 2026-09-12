@@ -205,6 +205,37 @@ function remainingSeconds(child) {
   return budget - consumed;
 }
 
+// ---------- Historique quotidien (pour le calendrier de stats) ----------
+
+// Enregistre/actualise la ligne d'historique du jour `date` pour cet enfant.
+// `consumedSeconds` : valeur à figer (par défaut le compteur actuel de l'enfant,
+// en incluant la session en cours si elle tourne).
+async function syncDailyStat(child, date, consumedSeconds) {
+  const dateStr = date || child.reset_date;
+  const budget = todayBudgetSeconds(child);
+  let consumed = consumedSeconds;
+  if (consumed == null) {
+    consumed = child.consumed_seconds || 0;
+    if (child.is_running && child.started_at) {
+      consumed += Math.max(0, (Date.now() - new Date(child.started_at).getTime()) / 1000);
+    }
+  }
+  try {
+    await supabaseClient.from("daily_stats").upsert(
+      {
+        child_id: child.id,
+        date: dateStr,
+        consumed_seconds: Math.round(consumed),
+        budget_seconds: Math.round(budget),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "child_id,date" }
+    );
+  } catch (e) {
+    console.warn("Historique indisponible", e);
+  }
+}
+
 function playAlarm() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -258,6 +289,9 @@ async function maybeResetDaily() {
   const toReset = children.filter((c) => c.reset_date !== today);
   for (const c of toReset) {
     alarmedIds.delete(c.id);
+    // on fige l'historique du jour qui se termine (session en cours incluse)
+    // avant de remettre les compteurs à zéro
+    await syncDailyStat(c, c.reset_date);
     await supabaseClient
       .from("children")
       .update({
@@ -278,6 +312,9 @@ async function maybeResetDaily() {
 
 setInterval(() => {
   maybeResetDaily();
+  // garde l'historique du jour à peu près à jour même si un enfant reste
+  // en train de jouer sans jamais mettre pause
+  children.filter((c) => c.is_running).forEach((c) => syncDailyStat(c, c.reset_date));
 }, 30000);
 
 // ---------- Rendu ----------
@@ -364,6 +401,7 @@ async function toggleTimer(child) {
       .from("children")
       .update({ is_running: false, started_at: null, consumed_seconds: Math.round(newConsumed) })
       .eq("id", child.id);
+    syncDailyStat(child, child.reset_date, newConsumed);
   } else {
     const nowIso = new Date().toISOString();
     child.is_running = true;
@@ -467,6 +505,7 @@ async function applyAdjustment(deltaSeconds, note) {
   await supabaseClient.from("adjustments").insert({ child_id: child.id, delta_seconds: deltaSeconds, note: note || null });
   child.bonus_seconds = newBonus;
   alarmedIds.delete(child.id);
+  syncDailyStat(child, child.reset_date);
   adjustModal.close();
   render();
 }
@@ -505,6 +544,117 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW indisponible", e));
   });
 }
+
+// ---------- Statistiques (calendrier mensuel) ----------
+
+const statsModal = document.getElementById("statsModal");
+const statsChildSelect = document.getElementById("statsChildSelect");
+const statsMonthLabel = document.getElementById("statsMonthLabel");
+const statsGrid = document.getElementById("statsGrid");
+const MONTH_LABELS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+
+let statsYear = null;
+let statsMonth = null; // 0-11
+
+function openStatsModal() {
+  if (children.length === 0) {
+    alert("Ajoute au moins un enfant pour voir des statistiques.");
+    return;
+  }
+  const keepId = statsChildSelect.value && children.some((c) => c.id === statsChildSelect.value)
+    ? statsChildSelect.value
+    : children[0].id;
+  statsChildSelect.innerHTML = children
+    .map((c) => `<option value="${c.id}">${c.emoji || "🧒"} ${escapeHtml(c.name)}</option>`)
+    .join("");
+  statsChildSelect.value = keepId;
+
+  const now = new Date();
+  statsYear = now.getFullYear();
+  statsMonth = now.getMonth();
+
+  renderStatsMonth();
+  statsModal.showModal();
+}
+
+function shiftStatsMonth(delta) {
+  statsMonth += delta;
+  if (statsMonth < 0) { statsMonth = 11; statsYear--; }
+  if (statsMonth > 11) { statsMonth = 0; statsYear++; }
+  renderStatsMonth();
+}
+
+async function renderStatsMonth() {
+  const childId = statsChildSelect.value;
+  const child = children.find((c) => c.id === childId);
+  statsMonthLabel.textContent = `${MONTH_LABELS[statsMonth]} ${statsYear}`;
+  statsGrid.innerHTML = "";
+  if (!child) return;
+
+  const firstOfMonth = new Date(statsYear, statsMonth, 1);
+  const lastOfMonth = new Date(statsYear, statsMonth + 1, 0);
+  const firstStr = firstOfMonth.toISOString().slice(0, 10);
+  const lastStr = lastOfMonth.toISOString().slice(0, 10);
+
+  const { data, error } = await supabaseClient
+    .from("daily_stats")
+    .select("*")
+    .eq("child_id", childId)
+    .gte("date", firstStr)
+    .lte("date", lastStr);
+
+  const byDate = {};
+  if (!error && data) {
+    for (const row of data) byDate[row.date] = row;
+  }
+
+  // Si le mois affiché est le mois en cours, on ajoute la valeur du jour
+  // même si elle n'a pas encore été synchronisée en base (session en cours).
+  const todayStr = todayIsoDate();
+  if (firstStr <= todayStr && todayStr <= lastStr) {
+    byDate[todayStr] = {
+      consumed_seconds: Math.round(
+        (child.consumed_seconds || 0) +
+          (child.is_running && child.started_at ? Math.max(0, (Date.now() - new Date(child.started_at).getTime()) / 1000) : 0)
+      ),
+      budget_seconds: Math.round(todayBudgetSeconds(child)),
+    };
+  }
+
+  // Lundi = 0 ... Dimanche = 6
+  const firstWeekday = (firstOfMonth.getDay() + 6) % 7;
+  const daysInMonth = lastOfMonth.getDate();
+
+  for (let i = 0; i < firstWeekday; i++) {
+    const filler = document.createElement("div");
+    filler.className = "stats-day stats-empty";
+    statsGrid.appendChild(filler);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${statsYear}-${String(statsMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const cell = document.createElement("div");
+    cell.className = "stats-day";
+    if (dateStr === todayStr) cell.classList.add("stats-today");
+
+    const stat = byDate[dateStr];
+    let minLabel = "";
+    if (stat && (stat.consumed_seconds > 0 || stat.budget_seconds > 0)) {
+      const usedMin = Math.round(stat.consumed_seconds / 60);
+      minLabel = `${usedMin}m`;
+      cell.classList.add(stat.consumed_seconds > stat.budget_seconds ? "stats-over" : "stats-ok");
+    }
+
+    cell.innerHTML = `<span class="stats-day-num">${day}</span><span class="stats-day-min">${minLabel}</span>`;
+    statsGrid.appendChild(cell);
+  }
+}
+
+document.getElementById("statsBtn").addEventListener("click", openStatsModal);
+document.getElementById("statsCloseBtn").addEventListener("click", () => statsModal.close());
+document.getElementById("statsPrevBtn").addEventListener("click", () => shiftStatsMonth(-1));
+document.getElementById("statsNextBtn").addEventListener("click", () => shiftStatsMonth(1));
+statsChildSelect.addEventListener("change", renderStatsMonth);
 
 // ---------- Démarrage ----------
 

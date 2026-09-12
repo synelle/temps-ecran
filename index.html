@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>⏱️ Temps d'écran</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⏱️</text></svg>" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <h1>⏱️ Temps d'écran</h1>
+  <button id="addChildBtn" class="btn btn-add" title="Ajouter un enfant">➕ Enfant</button>
+</header>
+
+<main id="rows" class="rows">
+  <!-- les lignes enfants sont générées par app.js -->
+  <p id="emptyMsg" class="empty-msg" hidden>Aucun enfant pour l'instant. Clique sur « ➕ Enfant » pour commencer !</p>
+</main>
+
+<!-- Modale réglages (jours + temps par jour) -->
+<dialog id="settingsModal" class="modal">
+  <form method="dialog" class="modal-card">
+    <h2 id="settingsTitle">Réglages</h2>
+    <p class="modal-sub">Temps autorisé par jour</p>
+    <div class="days-grid" id="daysGrid"></div>
+    <div class="modal-row">
+      <label for="colorPick">Couleur</label>
+      <input type="color" id="colorPick" />
+      <label for="emojiPick">Avatar</label>
+      <select id="emojiPick">
+        <option value="🧒">🧒</option>
+        <option value="👦">👦</option>
+        <option value="👧">👧</option>
+        <option value="🐱">🐱</option>
+        <option value="🐶">🐶</option>
+        <option value="🦁">🦁</option>
+        <option value="🐼">🐼</option>
+        <option value="🦄">🦄</option>
+        <option value="🚀">🚀</option>
+        <option value="⭐">⭐</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button type="button" id="deleteChildBtn" class="btn btn-danger">🗑️ Supprimer l'enfant</button>
+      <div class="modal-actions-right">
+        <button type="button" id="cancelSettingsBtn" class="btn">Annuler</button>
+        <button type="button" id="saveSettingsBtn" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modale ajustement ponctuel -->
+<dialog id="adjustModal" class="modal">
+  <form method="dialog" class="modal-card">
+    <h2 id="adjustTitle">Ajuster le temps</h2>
+    <div class="quick-buttons">
+      <button type="button" class="btn btn-quick btn-plus" data-delta="600">+10 min</button>
+      <button type="button" class="btn btn-quick btn-plus" data-delta="1800">+30 min</button>
+      <button type="button" class="btn btn-quick btn-minus" data-delta="-600">-10 min</button>
+      <button type="button" class="btn btn-quick btn-minus" data-delta="-1800">-30 min</button>
+    </div>
+    <label for="adjustMinutes">Minutes personnalisées (+ ou -)</label>
+    <input type="number" id="adjustMinutes" placeholder="ex: 15 ou -5" />
+    <label for="adjustNote">Raison (optionnel)</label>
+    <input type="text" id="adjustNote" placeholder="ex: bien rangé sa chambre" maxlength="80" />
+    <div class="modal-actions">
+      <div class="modal-actions-right">
+        <button type="button" id="cancelAdjustBtn" class="btn">Annuler</button>
+        <button type="button" id="applyAdjustBtn" class="btn btn-primary">Appliquer</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modale ajout enfant -->
+<dialog id="addChildModal" class="modal">
+  <form method="dialog" class="modal-card">
+    <h2>Nouvel enfant</h2>
+    <label for="newChildName">Prénom</label>
+    <input type="text" id="newChildName" placeholder="Prénom" maxlength="30" />
+    <div class="modal-actions">
+      <div class="modal-actions-right">
+        <button type="button" id="cancelAddChildBtn" class="btn">Annuler</button>
+        <button type="button" id="confirmAddChildBtn" class="btn btn-primary">Ajouter</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

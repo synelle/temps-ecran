@@ -39,28 +39,27 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-.topbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
+/* ---- Boutons flottants : plus de bandeau de titre, ils flottent en
+   transparence par-dessus la ligne du premier enfant pour libérer
+   toute la hauteur de l'écran ---- */
 .topbar-actions {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
-.topbar h1 {
-  font-size: clamp(18px, 3vw, 28px);
-  margin: 0;
+.btn-float {
+  background: color-mix(in srgb, var(--card-bg) 70%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
 }
 
-/* ---- Zone des lignes : occupe tout l'espace restant, découpée
+/* ---- Zone des lignes : occupe TOUTE la hauteur de l'écran, découpée
    en parts strictement égales selon le nombre d'enfants ---- */
 .rows {
   flex: 1 1 auto;
@@ -68,7 +67,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 0 14px 14px;
+  padding: 10px 14px;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
@@ -115,16 +114,16 @@ body {
 .child-identity {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: 1 1 160px;
-  min-width: 0;
+  gap: clamp(4px, 2vw, 10px);
+  flex: 1 1 60px;
+  min-width: 40px; /* garantit que l'avatar reste toujours visible */
   overflow: hidden;
 }
 
 .child-avatar {
-  font-size: clamp(18px, 5vh, 34px);
-  width: clamp(30px, 8vh, 54px);
-  height: clamp(30px, 8vh, 54px);
+  font-size: clamp(16px, min(5vh, 6vw), 34px);
+  width: clamp(26px, min(8vh, 9vw), 54px);
+  height: clamp(26px, min(8vh, 9vw), 54px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -134,7 +133,7 @@ body {
 }
 
 .child-name {
-  font-size: clamp(14px, 4vh, 24px);
+  font-size: clamp(12px, min(4vh, 4.2vw), 24px);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -148,12 +147,13 @@ body {
 }
 
 .timer-display {
-  font-size: clamp(18px, 7vh, 44px);
+  font-size: clamp(15px, min(7vh, 7.5vw), 44px);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  min-width: 90px;
+  min-width: clamp(46px, 16vw, 130px);
   text-align: center;
-  flex: 1 1 90px;
+  flex: 1 1 auto;
+  overflow: hidden;
   color: var(--child-color, var(--accent));
 }
 
@@ -164,7 +164,7 @@ body {
 .row-actions {
   display: flex;
   align-items: center;
-  gap: clamp(4px, 1.2vh, 10px);
+  gap: clamp(3px, min(1.2vh, 1.5vw), 10px);
   flex-wrap: nowrap;
   flex: 0 0 auto;
   justify-content: flex-end;
@@ -186,9 +186,9 @@ body {
 .btn:hover { filter: brightness(0.96); }
 
 .btn-play {
-  font-size: clamp(16px, 5vh, 28px);
-  width: clamp(38px, 10vh, 66px);
-  height: clamp(38px, 10vh, 66px);
+  font-size: clamp(14px, min(5vh, 6vw), 28px);
+  width: clamp(30px, min(10vh, 12vw), 66px);
+  height: clamp(30px, min(10vh, 12vw), 66px);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -205,9 +205,9 @@ body {
 }
 
 .btn-icon {
-  font-size: clamp(14px, 3.5vh, 22px);
-  width: clamp(30px, 8vh, 50px);
-  height: clamp(30px, 8vh, 50px);
+  font-size: clamp(12px, min(3.5vh, 4.5vw), 22px);
+  width: clamp(24px, min(8vh, 9vw), 50px);
+  height: clamp(24px, min(8vh, 9vw), 50px);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -339,6 +339,7 @@ body {
      dépasser la part de hauteur allouée à chaque enfant */
   .child-sub { display: none; }
   .row-actions { gap: 4px; }
+  .child-row { padding: 8px 12px; gap: 6px; }
 }
 
 /* ---- Clavier PIN ---- */

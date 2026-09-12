@@ -507,6 +507,14 @@ document.getElementById("confirmAddChildBtn").addEventListener("click", async ()
   render();
 });
 
+// ---------- PWA : installation & mise en cache de la coquille ----------
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW indisponible", e));
+  });
+}
+
 // ---------- Démarrage ----------
 
 loadChildren();

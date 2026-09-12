@@ -16,6 +16,151 @@ let currentAdjustId = null;
 let audioCtx = null;
 const alarmedIds = new Set(); // pour ne jouer l'alarme qu'une fois par enfant tant qu'il n'a pas été relancé/reset
 
+// ---------- Code PIN ----------
+const PIN_UNLOCK_MS = 10 * 60 * 1000; // une fois entré, pas redemandé pendant 10 min
+let pinHash = null;
+let unlockedAt = 0;
+
+function isUnlocked() {
+  return !!pinHash && Date.now() - unlockedAt < PIN_UNLOCK_MS;
+}
+
+async function sha256Hex(text) {
+  const enc = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function loadPinSettings() {
+  const { data } = await supabaseClient.from("app_settings").select("*").eq("id", 1).maybeSingle();
+  pinHash = (data && data.pin_hash) || null;
+}
+
+async function savePinHash(hash) {
+  await supabaseClient.from("app_settings").upsert({ id: 1, pin_hash: hash, updated_at: new Date().toISOString() });
+  pinHash = hash;
+}
+
+// ---- Modale saisie PIN (réutilisée pour saisie et création) ----
+const pinModal = document.getElementById("pinModal");
+const pinDots = document.getElementById("pinDots");
+const pinModalTitle = document.getElementById("pinModalTitle");
+const pinModalSub = document.getElementById("pinModalSub");
+let pinValue = "";
+let pinResolver = null;
+
+function renderPinDots() {
+  const len = Math.max(pinValue.length, 4);
+  pinDots.innerHTML = "";
+  for (let i = 0; i < Math.max(4, pinValue.length); i++) {
+    const span = document.createElement("span");
+    if (i < pinValue.length) span.classList.add("filled");
+    pinDots.appendChild(span);
+  }
+}
+
+function askPin(title, sub) {
+  pinValue = "";
+  pinModalTitle.textContent = title;
+  pinModalSub.textContent = sub || "";
+  renderPinDots();
+  pinModal.showModal();
+  return new Promise((resolve) => {
+    pinResolver = resolve;
+  });
+}
+
+document.querySelectorAll(".pin-key").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const key = btn.dataset.key;
+    if (key === "clear") {
+      pinValue = pinValue.slice(0, -1);
+    } else if (key === "ok") {
+      pinModal.close();
+      if (pinResolver) pinResolver(pinValue.length >= 4 ? pinValue : null);
+      pinResolver = null;
+      return;
+    } else if (pinValue.length < 8) {
+      pinValue += key;
+    }
+    renderPinDots();
+  });
+});
+
+document.getElementById("pinCancelBtn").addEventListener("click", () => {
+  pinModal.close();
+  if (pinResolver) pinResolver(null);
+  pinResolver = null;
+});
+
+// Crée un nouveau PIN (demande + confirmation), l'enregistre, renvoie true/false
+async function setupPinFlow() {
+  const first = await askPin("Crée un code PIN", "4 chiffres minimum, pour protéger les réglages");
+  if (!first) return false;
+  const confirm1 = await askPin("Confirme le code PIN", "Retape le même code");
+  if (!confirm1) return false;
+  if (first !== confirm1) {
+    alert("Les deux codes ne correspondent pas, réessaie.");
+    return setupPinFlow();
+  }
+  const hash = await sha256Hex(first);
+  await savePinHash(hash);
+  return true;
+}
+
+// Vérifie le PIN existant (ou laisse passer si aucun n'est configuré)
+async function verifyPin() {
+  if (!pinHash) return true;
+  if (isUnlocked()) return true;
+  const val = await askPin("Code PIN", "Réservé aux parents");
+  if (val == null) return false;
+  const hash = await sha256Hex(val);
+  if (hash === pinHash) {
+    unlockedAt = Date.now();
+    return true;
+  }
+  alert("Code PIN incorrect.");
+  return false;
+}
+
+// Exécute `action` seulement après vérification (ou création si aucun PIN n'existe encore)
+async function withPinProtection(action) {
+  if (!pinHash) {
+    const ok = await setupPinFlow();
+    if (!ok) return;
+    unlockedAt = Date.now();
+    action();
+    return;
+  }
+  const ok = await verifyPin();
+  if (ok) action();
+}
+
+// ---- Gestion du PIN (bouton 🔒 dans le header) ----
+const pinManageModal = document.getElementById("pinManageModal");
+
+document.getElementById("pinManageBtn").addEventListener("click", async () => {
+  if (!pinHash) {
+    await setupPinFlow();
+    return;
+  }
+  const ok = await verifyPin();
+  if (ok) pinManageModal.showModal();
+});
+
+document.getElementById("pinManageCloseBtn").addEventListener("click", () => pinManageModal.close());
+
+document.getElementById("pinChangeBtn").addEventListener("click", async () => {
+  pinManageModal.close();
+  await setupPinFlow();
+});
+
+document.getElementById("pinRemoveBtn").addEventListener("click", async () => {
+  if (!confirm("Supprimer le code PIN ? Les réglages ne seront plus protégés.")) return;
+  await savePinHash(null);
+  pinManageModal.close();
+});
+
 const rowsEl = document.getElementById("rows");
 const emptyMsg = document.getElementById("emptyMsg");
 
@@ -136,6 +281,7 @@ setInterval(() => {
 
 function render() {
   emptyMsg.hidden = children.length > 0;
+  rowsEl.classList.toggle("is-empty", children.length === 0);
   rowsEl.querySelectorAll(".child-row").forEach((el) => el.remove());
 
   for (const child of children) {
@@ -164,7 +310,7 @@ function render() {
 
     row.querySelector('[data-action="toggle"]').addEventListener("click", () => toggleTimer(child));
     row.querySelector('[data-action="adjust"]').addEventListener("click", () => openAdjustModal(child));
-    row.querySelector('[data-action="settings"]').addEventListener("click", () => openSettingsModal(child));
+    row.querySelector('[data-action="settings"]').addEventListener("click", () => withPinProtection(() => openSettingsModal(child)));
 
     rowsEl.appendChild(row);
   }
@@ -338,8 +484,10 @@ async function applyAdjustment(deltaSeconds, note) {
 
 const addChildModal = document.getElementById("addChildModal");
 document.getElementById("addChildBtn").addEventListener("click", () => {
-  document.getElementById("newChildName").value = "";
-  addChildModal.showModal();
+  withPinProtection(() => {
+    document.getElementById("newChildName").value = "";
+    addChildModal.showModal();
+  });
 });
 document.getElementById("cancelAddChildBtn").addEventListener("click", () => addChildModal.close());
 document.getElementById("confirmAddChildBtn").addEventListener("click", async () => {
@@ -362,3 +510,11 @@ document.getElementById("confirmAddChildBtn").addEventListener("click", async ()
 // ---------- Démarrage ----------
 
 loadChildren();
+loadPinSettings();
+
+supabaseClient
+  .channel("app-settings-changes")
+  .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, () => {
+    loadPinSettings();
+  })
+  .subscribe();

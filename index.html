@@ -11,7 +11,10 @@
 
 <header class="topbar">
   <h1>⏱️ Temps d'écran</h1>
-  <button id="addChildBtn" class="btn btn-add" title="Ajouter un enfant">➕ Enfant</button>
+  <div class="topbar-actions">
+    <button id="pinManageBtn" class="btn btn-icon" title="Code PIN">🔒</button>
+    <button id="addChildBtn" class="btn btn-add" title="Ajouter un enfant">➕ Enfant</button>
+  </div>
 </header>
 
 <main id="rows" class="rows">
@@ -88,6 +91,49 @@
       </div>
     </div>
   </form>
+</dialog>
+
+<!-- Modale code PIN (saisie / création) -->
+<dialog id="pinModal" class="modal">
+  <div class="modal-card">
+    <h2 id="pinModalTitle">Code PIN</h2>
+    <p id="pinModalSub" class="modal-sub"></p>
+    <div id="pinDots" class="pin-dots"></div>
+    <div class="pin-keypad">
+      <button type="button" class="btn pin-key" data-key="1">1</button>
+      <button type="button" class="btn pin-key" data-key="2">2</button>
+      <button type="button" class="btn pin-key" data-key="3">3</button>
+      <button type="button" class="btn pin-key" data-key="4">4</button>
+      <button type="button" class="btn pin-key" data-key="5">5</button>
+      <button type="button" class="btn pin-key" data-key="6">6</button>
+      <button type="button" class="btn pin-key" data-key="7">7</button>
+      <button type="button" class="btn pin-key" data-key="8">8</button>
+      <button type="button" class="btn pin-key" data-key="9">9</button>
+      <button type="button" class="btn pin-key pin-key-clear" data-key="clear">⌫</button>
+      <button type="button" class="btn pin-key" data-key="0">0</button>
+      <button type="button" class="btn pin-key pin-key-ok" data-key="ok">✔</button>
+    </div>
+    <div class="modal-actions">
+      <div class="modal-actions-right">
+        <button type="button" id="pinCancelBtn" class="btn">Annuler</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<!-- Modale gestion du PIN (changer / supprimer) -->
+<dialog id="pinManageModal" class="modal">
+  <div class="modal-card">
+    <h2>Code PIN</h2>
+    <p class="modal-sub">Protège les réglages et l'ajout/suppression d'enfants.</p>
+    <div class="modal-actions">
+      <button type="button" id="pinRemoveBtn" class="btn btn-danger">🗑️ Supprimer le code</button>
+      <div class="modal-actions-right">
+        <button type="button" id="pinManageCloseBtn" class="btn">Fermer</button>
+        <button type="button" id="pinChangeBtn" class="btn btn-primary">Changer le code</button>
+      </div>
+    </div>
+  </div>
 </dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>

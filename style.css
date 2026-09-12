@@ -24,9 +24,15 @@
 
 * { box-sizing: border-box; }
 
+html, body {
+  height: 100%;
+  overflow: hidden; /* la page ne scrolle jamais : tout tient à l'écran */
+}
+
 body {
   margin: 0;
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
   color: var(--text);
   font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
@@ -34,47 +40,67 @@ body {
 }
 
 .topbar {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px;
+  padding: 12px 20px;
   gap: 12px;
   flex-wrap: wrap;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .topbar h1 {
-  font-size: clamp(22px, 4vw, 32px);
+  font-size: clamp(18px, 3vw, 28px);
   margin: 0;
 }
 
+/* ---- Zone des lignes : occupe tout l'espace restant, découpée
+   en parts strictement égales selon le nombre d'enfants ---- */
 .rows {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 0 16px 40px;
-  max-width: 1000px;
+  gap: 10px;
+  padding: 0 14px 14px;
+  width: 100%;
+  max-width: 1200px;
   margin: 0 auto;
+  overflow: hidden;
+}
+
+.rows.is-empty {
+  justify-content: center;
+  align-items: center;
 }
 
 .empty-msg {
   text-align: center;
   color: var(--text-soft);
   font-size: 18px;
-  margin-top: 40px;
+  margin: 0;
 }
 
-/* ---- Ligne enfant ---- */
+/* ---- Ligne enfant : chaque ligne prend une part égale de la hauteur ---- */
 .child-row {
+  flex: 1 1 0;
+  min-height: 0;
   background: var(--card-bg);
   border-radius: 20px;
   box-shadow: var(--shadow);
-  padding: 18px 22px;
+  padding: 10px 22px;
   display: flex;
   align-items: center;
   gap: 18px;
-  flex-wrap: wrap;
   border-left: 10px solid var(--child-color, var(--accent));
   transition: box-shadow .2s;
+  overflow: hidden;
 }
 
 .child-row.time-up {
@@ -89,15 +115,16 @@ body {
 .child-identity {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex: 1 1 160px;
-  min-width: 140px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .child-avatar {
-  font-size: 34px;
-  width: 54px;
-  height: 54px;
+  font-size: clamp(18px, 5vh, 34px);
+  width: clamp(30px, 8vh, 54px);
+  height: clamp(30px, 8vh, 54px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -107,22 +134,26 @@ body {
 }
 
 .child-name {
-  font-size: clamp(18px, 3vw, 24px);
+  font-size: clamp(14px, 4vh, 24px);
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .child-sub {
-  font-size: 13px;
+  font-size: clamp(10px, 2vh, 13px);
   color: var(--text-soft);
+  white-space: nowrap;
 }
 
 .timer-display {
-  font-size: clamp(28px, 6vw, 44px);
+  font-size: clamp(18px, 7vh, 44px);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  min-width: 130px;
+  min-width: 90px;
   text-align: center;
-  flex: 1 1 130px;
+  flex: 1 1 90px;
   color: var(--child-color, var(--accent));
 }
 
@@ -133,9 +164,9 @@ body {
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  flex: 1 1 auto;
+  gap: clamp(4px, 1.2vh, 10px);
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
   justify-content: flex-end;
 }
 
@@ -155,9 +186,9 @@ body {
 .btn:hover { filter: brightness(0.96); }
 
 .btn-play {
-  font-size: 28px;
-  width: 66px;
-  height: 66px;
+  font-size: clamp(16px, 5vh, 28px);
+  width: clamp(38px, 10vh, 66px);
+  height: clamp(38px, 10vh, 66px);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -166,6 +197,7 @@ body {
   background: var(--ok);
   color: white;
   box-shadow: 0 3px 8px rgba(22,163,74,.4);
+  flex-shrink: 0;
 }
 .btn-play.running {
   background: var(--danger);
@@ -173,15 +205,16 @@ body {
 }
 
 .btn-icon {
-  font-size: 22px;
-  width: 50px;
-  height: 50px;
+  font-size: clamp(14px, 3.5vh, 22px);
+  width: clamp(30px, 8vh, 50px);
+  height: clamp(30px, 8vh, 50px);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   background: var(--bg);
+  flex-shrink: 0;
 }
 
 .btn-primary { background: var(--accent); color: white; }
@@ -302,11 +335,49 @@ body {
 }
 
 @media (max-width: 560px) {
-  .child-row {
-    flex-direction: column;
-    align-items: stretch;
-    text-align: center;
-  }
-  .child-identity { justify-content: center; }
-  .row-actions { justify-content: center; }
+  /* on garde une seule ligne horizontale (pas d'empilement) pour ne jamais
+     dépasser la part de hauteur allouée à chaque enfant */
+  .child-sub { display: none; }
+  .row-actions { gap: 4px; }
+}
+
+/* ---- Clavier PIN ---- */
+.pin-dots {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 6px 0;
+}
+
+.pin-dots span {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: transparent;
+}
+
+.pin-dots span.filled {
+  background: var(--accent);
+}
+
+.pin-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.pin-key {
+  font-size: 22px;
+  padding: 16px 0;
+}
+
+.pin-key-ok {
+  background: var(--accent);
+  color: white;
+}
+
+.pin-key-clear {
+  background: #fee2e2;
+  color: #991b1b;
 }

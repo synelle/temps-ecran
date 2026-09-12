@@ -15,6 +15,9 @@ let currentSettingsId = null;
 let currentAdjustId = null;
 let audioCtx = null;
 const alarmedIds = new Set(); // pour ne jouer l'alarme qu'une fois par enfant tant qu'il n'a pas été relancé/reset
+const fiveMinAlertedIds = new Set(); // alerte "5 minutes restantes" déjà jouée
+const twoMinAlertedIds = new Set();  // alerte "2 minutes restantes" déjà jouée
+const overtimeTicks = new Map();     // dernier palier de 30s (en négatif) déjà sonné, par enfant
 
 // ---------- Code PIN ----------
 const PIN_UNLOCK_MS = 10 * 60 * 1000; // une fois entré, pas redemandé pendant 10 min
@@ -236,25 +239,43 @@ async function syncDailyStat(child, date, consumedSeconds) {
   }
 }
 
-function playAlarm() {
+// Joue `count` bips de fréquence `freq`, espacés de `gap` secondes.
+function playTone(freq, count, gap) {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const now = audioCtx.currentTime;
-    [0, 0.35, 0.7].forEach((t) => {
+    for (let i = 0; i < count; i++) {
+      const t = i * gap;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = "sine";
-      osc.frequency.value = 880;
+      osc.frequency.value = freq;
       gain.gain.setValueAtTime(0.0001, now + t);
       gain.gain.exponentialRampToValueAtTime(0.3, now + t + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.3);
       osc.connect(gain).connect(audioCtx.destination);
       osc.start(now + t);
       osc.stop(now + t + 0.32);
-    });
+    }
   } catch (e) {
-    console.warn("Alarme indisponible", e);
+    console.warn("Son indisponible", e);
   }
+}
+
+// Sonnerie "il reste 5 minutes" : un bip calme
+function playFiveMinWarning() {
+  playTone(660, 1, 0.35);
+}
+
+// Sonnerie "il reste 2 minutes" : deux bips, un peu plus aigus/pressants
+function playTwoMinWarning() {
+  playTone(784, 2, 0.25);
+}
+
+// Sonnerie "le temps est écoulé" (et répétée toutes les 30s en négatif) :
+// trois bips plus insistants
+function playAlarm() {
+  playTone(880, 3, 0.35);
 }
 
 // ---------- Chargement + realtime ----------
@@ -289,6 +310,9 @@ async function maybeResetDaily() {
   const toReset = children.filter((c) => c.reset_date !== today);
   for (const c of toReset) {
     alarmedIds.delete(c.id);
+    fiveMinAlertedIds.delete(c.id);
+    twoMinAlertedIds.delete(c.id);
+    overtimeTicks.delete(c.id);
     // on fige l'historique du jour qui se termine (session en cours incluse)
     // avant de remettre les compteurs à zéro
     await syncDailyStat(c, c.reset_date);
@@ -380,10 +404,35 @@ setInterval(() => {
         // le temps est écoulé, mais le chrono continue de tourner en négatif
         // (pas d'arrêt automatique) pour que le parent voie le dépassement
       }
+      // sonnerie répétée toutes les 30s tant que le dépassement continue
+      if (child.is_running) {
+        const tick = Math.floor(Math.abs(rem) / 30);
+        if (tick >= 1 && tick > (overtimeTicks.get(child.id) || 0)) {
+          overtimeTicks.set(child.id, tick);
+          playAlarm();
+        }
+      } else {
+        overtimeTicks.delete(child.id);
+      }
     } else {
       display.classList.remove("time-up");
       row.classList.remove("time-up");
       if (rem > 1) alarmedIds.delete(child.id);
+      overtimeTicks.delete(child.id);
+
+      // alertes "il reste 5 min" / "il reste 2 min"
+      if (child.is_running) {
+        if (rem <= 300 && !fiveMinAlertedIds.has(child.id)) {
+          fiveMinAlertedIds.add(child.id);
+          playFiveMinWarning();
+        }
+        if (rem <= 120 && !twoMinAlertedIds.has(child.id)) {
+          twoMinAlertedIds.add(child.id);
+          playTwoMinWarning();
+        }
+      }
+      if (rem > 300) fiveMinAlertedIds.delete(child.id);
+      if (rem > 120) twoMinAlertedIds.delete(child.id);
     }
   }
 }, 1000);
@@ -407,6 +456,9 @@ async function toggleTimer(child) {
     child.is_running = true;
     child.started_at = nowIso;
     alarmedIds.delete(child.id);
+    fiveMinAlertedIds.delete(child.id);
+    twoMinAlertedIds.delete(child.id);
+    overtimeTicks.delete(child.id);
     await supabaseClient
       .from("children")
       .update({ is_running: true, started_at: nowIso })
@@ -505,6 +557,9 @@ async function applyAdjustment(deltaSeconds, note) {
   await supabaseClient.from("adjustments").insert({ child_id: child.id, delta_seconds: deltaSeconds, note: note || null });
   child.bonus_seconds = newBonus;
   alarmedIds.delete(child.id);
+  fiveMinAlertedIds.delete(child.id);
+  twoMinAlertedIds.delete(child.id);
+  overtimeTicks.delete(child.id);
   syncDailyStat(child, child.reset_date);
   adjustModal.close();
   render();

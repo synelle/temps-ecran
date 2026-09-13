@@ -64,16 +64,25 @@
 <dialog id="adjustModal" class="modal">
   <form method="dialog" class="modal-card">
     <h2 id="adjustTitle">Ajuster le temps</h2>
-    <div class="quick-buttons">
+
+    <div class="segmented" id="adjustModeSwitch">
+      <button type="button" class="segmented-btn active" data-mode="budget">🎁 Offrir / retirer du temps</button>
+      <button type="button" class="segmented-btn" data-mode="used">⏱️ Temps oublié (déjà utilisé)</button>
+    </div>
+    <p id="adjustModeHint" class="modal-sub">Change le temps disponible pour la journée choisie.</p>
+
+    <label for="adjustDate">S'applique au jour</label>
+    <input type="date" id="adjustDate" />
+    <div class="quick-buttons" id="adjustQuickButtons">
       <button type="button" class="btn btn-quick btn-plus" data-delta="600">+10 min</button>
       <button type="button" class="btn btn-quick btn-plus" data-delta="1800">+30 min</button>
       <button type="button" class="btn btn-quick btn-minus" data-delta="-600">-10 min</button>
       <button type="button" class="btn btn-quick btn-minus" data-delta="-1800">-30 min</button>
     </div>
-    <label for="adjustMinutes">Minutes personnalisées (+ ou -)</label>
+    <label for="adjustMinutes" id="adjustMinutesLabel">Minutes personnalisées (+ ou -)</label>
     <input type="number" id="adjustMinutes" placeholder="ex: 15 ou -5" />
     <label for="adjustNote">Raison (optionnel)</label>
-    <input type="text" id="adjustNote" placeholder="ex: bien rangé sa chambre" maxlength="80" />
+    <input type="text" id="adjustNote" placeholder="ex: bien rangé sa chambre / jeu sur la console du salon" maxlength="80" />
     <div class="modal-actions">
       <div class="modal-actions-right">
         <button type="button" id="cancelAdjustBtn" class="btn">Annuler</button>
@@ -156,6 +165,7 @@
       <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
     </div>
     <div id="statsGrid" class="stats-grid"></div>
+    <div id="statsDayDetail" class="stats-day-detail" hidden></div>
     <div class="stats-legend">
       <span><i class="stats-dot stats-dot-ok"></i> Dans le budget</span>
       <span><i class="stats-dot stats-dot-over"></i> Dépassé</span>

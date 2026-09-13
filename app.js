@@ -180,6 +180,20 @@ function todayIsoDate() {
   return local.toISOString().slice(0, 10);
 }
 
+// Clé du jour de la semaine ("mon".."sun") pour une date "YYYY-MM-DD" donnée
+function weekdayKeyForDate(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return DAY_KEYS[(date.getDay() + 6) % 7];
+}
+
+// Budget "de base" (sans ajustement ponctuel) pour un enfant à une date donnée,
+// d'après le temps hebdomadaire réglé pour ce jour de la semaine.
+function defaultBudgetSecondsForDate(child, dateStr) {
+  const key = weekdayKeyForDate(dateStr);
+  return ((child.weekly_limits && child.weekly_limits[key]) || 0) * 60;
+}
+
 function fmt(seconds) {
   const neg = seconds < 0;
   const s = Math.round(Math.abs(seconds));
@@ -316,21 +330,37 @@ async function maybeResetDaily() {
     // on fige l'historique du jour qui se termine (session en cours incluse)
     // avant de remettre les compteurs à zéro
     await syncDailyStat(c, c.reset_date);
+
+    // si un ajustement a déjà été programmé à l'avance pour le nouveau jour
+    // (ex: "-15 min demain"), on en tient compte dès le reset au lieu de
+    // l'écraser
+    let newBonus = 0;
+    const { data: preset } = await supabaseClient
+      .from("daily_stats")
+      .select("budget_seconds")
+      .eq("child_id", c.id)
+      .eq("date", today)
+      .maybeSingle();
+    if (preset) {
+      newBonus = preset.budget_seconds - defaultBudgetSecondsForDate(c, today);
+    }
+
     await supabaseClient
       .from("children")
       .update({
         consumed_seconds: 0,
-        bonus_seconds: 0,
+        bonus_seconds: newBonus,
         is_running: false,
         started_at: null,
         reset_date: today,
       })
       .eq("id", c.id);
     c.consumed_seconds = 0;
-    c.bonus_seconds = 0;
+    c.bonus_seconds = newBonus;
     c.is_running = false;
     c.started_at = null;
     c.reset_date = today;
+    syncDailyStat(c, today);
   }
 }
 
@@ -523,14 +553,44 @@ document.getElementById("deleteChildBtn").addEventListener("click", async () => 
 // ---------- Modale ajustement ponctuel ----------
 
 const adjustModal = document.getElementById("adjustModal");
+const adjustDate = document.getElementById("adjustDate");
 const adjustMinutes = document.getElementById("adjustMinutes");
+const adjustMinutesLabel = document.getElementById("adjustMinutesLabel");
 const adjustNote = document.getElementById("adjustNote");
+const adjustModeHint = document.getElementById("adjustModeHint");
+let adjustMode = "budget"; // "budget" (offrir/retirer du temps disponible) | "used" (temps oublié déjà utilisé)
+
+const ADJUST_MODE_INFO = {
+  budget: {
+    hint: "Change le temps disponible pour la journée choisie (récompense ou punition).",
+    minutesLabel: "Minutes personnalisées (+ ou -)",
+  },
+  used: {
+    hint: "Enregistre du temps d'écran réellement utilisé mais non chronométré (bouton oublié). Le temps disponible ne change pas, seul le temps déjà consommé est mis à jour.",
+    minutesLabel: "Minutes réellement utilisées (+ pour ajouter, - pour corriger)",
+  },
+};
+
+function setAdjustMode(mode) {
+  adjustMode = mode;
+  document.querySelectorAll("#adjustModeSwitch .segmented-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mode === mode);
+  });
+  adjustModeHint.textContent = ADJUST_MODE_INFO[mode].hint;
+  adjustMinutesLabel.textContent = ADJUST_MODE_INFO[mode].minutesLabel;
+}
+
+document.querySelectorAll("#adjustModeSwitch .segmented-btn").forEach((btn) => {
+  btn.addEventListener("click", () => setAdjustMode(btn.dataset.mode));
+});
 
 function openAdjustModal(child) {
   currentAdjustId = child.id;
   document.getElementById("adjustTitle").textContent = `Ajuster le temps — ${child.name}`;
+  adjustDate.value = todayIsoDate();
   adjustMinutes.value = "";
   adjustNote.value = "";
+  setAdjustMode("budget");
   adjustModal.showModal();
 }
 
@@ -539,28 +599,76 @@ document.getElementById("cancelAdjustBtn").addEventListener("click", () => adjus
 document.querySelectorAll(".btn-quick").forEach((btn) => {
   btn.addEventListener("click", async () => {
     const delta = parseInt(btn.dataset.delta, 10);
-    await applyAdjustment(delta, adjustNote.value.trim());
+    await applyAdjustment(delta, adjustNote.value.trim(), adjustDate.value, adjustMode);
   });
 });
 
 document.getElementById("applyAdjustBtn").addEventListener("click", async () => {
   const mins = parseInt(adjustMinutes.value, 10);
   if (!mins) { adjustModal.close(); return; }
-  await applyAdjustment(mins * 60, adjustNote.value.trim());
+  await applyAdjustment(mins * 60, adjustNote.value.trim(), adjustDate.value, adjustMode);
 });
 
-async function applyAdjustment(deltaSeconds, note) {
+// Applique un ajustement ponctuel au jour `dateStr` (aujourd'hui par défaut,
+// mais peut être un jour passé ou futur) :
+// - mode "budget" : change le temps DISPONIBLE (offert/retiré) pour ce jour.
+// - mode "used"   : enregistre du temps déjà CONSOMMÉ mais jamais chronométré
+//   (bouton démarrer/arrêter oublié) — le budget du jour ne change pas.
+// Jour passé ou futur : seul l'historique (daily_stats) est corrigé/pré-réglé.
+// Aujourd'hui : en plus, le compteur en direct de l'enfant est mis à jour.
+async function applyAdjustment(deltaSeconds, note, dateStr, kind) {
   const child = children.find((c) => c.id === currentAdjustId);
   if (!child) return;
-  const newBonus = (child.bonus_seconds || 0) + deltaSeconds;
-  await supabaseClient.from("children").update({ bonus_seconds: newBonus }).eq("id", child.id);
-  await supabaseClient.from("adjustments").insert({ child_id: child.id, delta_seconds: deltaSeconds, note: note || null });
-  child.bonus_seconds = newBonus;
-  alarmedIds.delete(child.id);
-  fiveMinAlertedIds.delete(child.id);
-  twoMinAlertedIds.delete(child.id);
-  overtimeTicks.delete(child.id);
-  syncDailyStat(child, child.reset_date);
+  const targetDate = dateStr || todayIsoDate();
+  const isToday = targetDate === todayIsoDate();
+  const mode = kind || "budget";
+
+  const { data: existing } = await supabaseClient
+    .from("daily_stats")
+    .select("budget_seconds, consumed_seconds")
+    .eq("child_id", child.id)
+    .eq("date", targetDate)
+    .maybeSingle();
+
+  const currentBudget = existing ? existing.budget_seconds : defaultBudgetSecondsForDate(child, targetDate);
+  const currentConsumed = existing ? existing.consumed_seconds : 0;
+
+  const newBudget = mode === "budget" ? Math.max(0, currentBudget + deltaSeconds) : currentBudget;
+  const newConsumed = mode === "used" ? Math.max(0, currentConsumed + deltaSeconds) : currentConsumed;
+
+  await supabaseClient.from("daily_stats").upsert(
+    {
+      child_id: child.id,
+      date: targetDate,
+      budget_seconds: newBudget,
+      consumed_seconds: newConsumed,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "child_id,date" }
+  );
+
+  await supabaseClient.from("adjustments").insert({ child_id: child.id, delta_seconds: deltaSeconds, note: note || null, date: targetDate, kind: mode });
+
+  if (isToday) {
+    if (mode === "budget") {
+      const defaultToday = defaultBudgetSecondsForDate(child, targetDate);
+      const newBonus = newBudget - defaultToday;
+      await supabaseClient.from("children").update({ bonus_seconds: newBonus }).eq("id", child.id);
+      child.bonus_seconds = newBonus;
+    } else {
+      // temps oublié : on l'ajoute directement au temps déjà consommé
+      // aujourd'hui (une session en cours continue de tourner normalement)
+      const newChildConsumed = Math.max(0, (child.consumed_seconds || 0) + deltaSeconds);
+      await supabaseClient.from("children").update({ consumed_seconds: Math.round(newChildConsumed) }).eq("id", child.id);
+      child.consumed_seconds = newChildConsumed;
+    }
+    alarmedIds.delete(child.id);
+    fiveMinAlertedIds.delete(child.id);
+    twoMinAlertedIds.delete(child.id);
+    overtimeTicks.delete(child.id);
+    syncDailyStat(child, child.reset_date);
+  }
+
   adjustModal.close();
   render();
 }
@@ -606,6 +714,7 @@ const statsModal = document.getElementById("statsModal");
 const statsChildSelect = document.getElementById("statsChildSelect");
 const statsMonthLabel = document.getElementById("statsMonthLabel");
 const statsGrid = document.getElementById("statsGrid");
+const statsDayDetail = document.getElementById("statsDayDetail");
 const MONTH_LABELS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
 let statsYear = null;
@@ -644,6 +753,8 @@ async function renderStatsMonth() {
   const child = children.find((c) => c.id === childId);
   statsMonthLabel.textContent = `${MONTH_LABELS[statsMonth]} ${statsYear}`;
   statsGrid.innerHTML = "";
+  statsDayDetail.hidden = true;
+  statsDayDetail.innerHTML = "";
   if (!child) return;
 
   const firstOfMonth = new Date(statsYear, statsMonth, 1);
@@ -701,8 +812,45 @@ async function renderStatsMonth() {
     }
 
     cell.innerHTML = `<span class="stats-day-num">${day}</span><span class="stats-day-min">${minLabel}</span>`;
+    cell.addEventListener("click", () => showStatsDayDetail(cell, child, dateStr, stat));
     statsGrid.appendChild(cell);
   }
+}
+
+// Affiche le détail d'un jour (temps utilisé/budget + liste des ajustements
+// ponctuels appliqués à ce jour-là) sous le calendrier.
+async function showStatsDayDetail(cell, child, dateStr, stat) {
+  statsGrid.querySelectorAll(".stats-day.stats-selected").forEach((el) => el.classList.remove("stats-selected"));
+  cell.classList.add("stats-selected");
+
+  const [y, m, d] = dateStr.split("-");
+  const niceDate = `${d}/${m}/${y}`;
+  const usedMin = stat ? Math.round(stat.consumed_seconds / 60) : 0;
+  const budgetMin = stat ? Math.round(stat.budget_seconds / 60) : Math.round(defaultBudgetSecondsForDate(child, dateStr) / 60);
+
+  statsDayDetail.innerHTML = `<h4>${niceDate}</h4><div>${usedMin} / ${budgetMin} min utilisées</div><p class="modal-sub" style="margin:6px 0 0">Chargement des ajustements…</p>`;
+  statsDayDetail.hidden = false;
+
+  const { data, error } = await supabaseClient
+    .from("adjustments")
+    .select("*")
+    .eq("child_id", child.id)
+    .eq("date", dateStr)
+    .order("created_at", { ascending: true });
+
+  const listHtml = !error && data && data.length
+    ? `<ul>${data
+        .map((a) => {
+          const mins = Math.round(a.delta_seconds / 60);
+          const sign = mins > 0 ? "stats-adj-plus" : "stats-adj-minus";
+          const label = `${mins > 0 ? "+" : ""}${mins} min`;
+          const kindLabel = a.kind === "used" ? "⏱️ temps oublié" : "🎁 temps offert/retiré";
+          return `<li><span class="${sign}">${label}</span> — ${kindLabel}${a.note ? " — " + escapeHtml(a.note) : ""}</li>`;
+        })
+        .join("")}</ul>`
+    : `<p class="modal-sub" style="margin:6px 0 0">Aucun ajustement ponctuel ce jour-là.</p>`;
+
+  statsDayDetail.innerHTML = `<h4>${niceDate}</h4><div>${usedMin} / ${budgetMin} min utilisées</div>${listHtml}`;
 }
 
 document.getElementById("statsBtn").addEventListener("click", openStatsModal);

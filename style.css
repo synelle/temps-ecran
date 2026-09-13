@@ -334,6 +334,32 @@ body {
   flex-wrap: wrap;
 }
 
+.segmented {
+  display: flex;
+  gap: 6px;
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.segmented-btn {
+  flex: 1;
+  border: none;
+  border-radius: 9px;
+  padding: 10px 8px;
+  background: transparent;
+  color: var(--text-soft);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.segmented-btn.active {
+  background: var(--card-bg);
+  color: var(--text);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
 @media (max-width: 560px) {
   /* on garde une seule ligne horizontale (pas d'empilement) pour ne jamais
      dépasser la part de hauteur allouée à chaque enfant */
@@ -475,6 +501,41 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
+.stats-day {
+  cursor: pointer;
+}
+.stats-day.stats-empty {
+  cursor: default;
+}
+.stats-day.stats-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.stats-day-detail {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.stats-day-detail h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.stats-day-detail ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.stats-day-detail li {
+  margin-bottom: 2px;
+}
+
+.stats-day-detail .stats-adj-plus { color: #166534; font-weight: 700; }
+.stats-day-detail .stats-adj-minus { color: #991b1b; font-weight: 700; }
 
 .stats-legend {
   display: flex;
